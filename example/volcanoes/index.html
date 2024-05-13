@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <style>
+        body {
+            margin: 0;
+            position: relative;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px;
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .button {
+            background-color: #4CAF50;
+            /* Green */
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: block;
+            font-size: 16px;
+            margin-bottom: 5px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .button:hover {
+            background-color: #45a049;
+        }
+
+        /* Dropdown Button */
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: #f9f9f9;
+            min-width: 160px;
+            box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.2);
+            z-index: 1;
+        }
+
+        .dropdown-content a {
+            color: black;
+            padding: 12px 16px;
+            text-decoration: none;
+            display: block;
+        }
+
+        .dropdown-content a:hover {
+            background-color: #f1f1f1;
+        }
+
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+
+        .dropdown:hover .dropbtn {
+            background-color: #3e8e41;
+        }
+    </style>
+
+    <script src="//unpkg.com/react/umd/react.production.min.js"></script>
+    <script src="//unpkg.com/react-dom/umd/react-dom.production.min.js"></script>
+    <script src="//unpkg.com/@babel/standalone"></script>
+
+    <script src="//unpkg.com/d3"></script>
+    <script src="//unpkg.com/polished@3.5.2/dist/polished.js"></script>
+    <script src="//unpkg.com/react-globe.gl"></script>
+</head>
+
+<body>
+    <div id="globeViz"></div>
+    <div id="overlay">
+        <!-- Existing buttons -->
+        <button id="toggleAllVolcanoesBtn">Show All Volcanoes</button>
+        <button id="toggleTop10HighestVolcanoesBtn">Show Top 10 Highest Volcanoes</button>
+        <button id="toggleTop10LowestVolcanoesBtn">Show Top 10 Lowest Volcanoes</button>
+        <button id="toggle10MostRecentActiveVolcanoesBtn">Show 10 Most Recent Active Volcanoes</button>
+        <button id="toggleTop10StratoVolcanoesBtn">Show Top 10 Strato Volcanoes</button>
+        <button id="toggle10MostRecentActiveVolcanoesInEuropeBtn">Show 10 Most Recent Active Volcanoes in
+            Europe</button>
+        <button id="toggle10MostRecentActiveVolcanoesInUSA">Show 10 Most Recent Active Volcanoes in USA</button>
+        <button id="toggle10MostRecentActiveVolcanoesInSouthAmerica">Show 10 Most Recent Active Volcanoes in South
+            America</button>
+
+        <!-- New dropdown button -->
+        <div class="dropdown">
+            <button class="button dropbtn">Get Volcanoes by Continent</button>
+            <div class="dropdown-content">
+                <a href="#" id="getVolcanoesAfricaBtn">Africa</a>
+                <a href="#" id="getVolcanoesAsiaBtn">Asia</a>
+                <a href="#" id="getVolcanoesEuropeBtn">Europe</a>
+                <a href="#" id="getVolcanoesNorthAmericaBtn">North America</a>
+                <a href="#" id="getVolcanoesOceaniaBtn">Oceania</a>
+                <a href="#" id="getVolcanoesSouthAmericaBtn">South America</a>
+                <a href="#" id="getVolcanoesAntarcticaBtn">Antarctica</a>
+            </div>
+        </div>
+    </div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const World = () => {
+            const [countries, setCountries] = useState(null);
+            const [volcanoes, setVolcanoes] = useState([]);
+
+
+            const getTop10HighestVolcanoes = () => {
+                const sortedVolcanoes = [...volcanoes].sort((a, b) => b.Column11 - a.Column11);
+                return sortedVolcanoes.slice(0, 10);
+            };
+
+            const getTop10LowestVolcanoes = () => {
+                const sortedVolcanoes = [...volcanoes].sort((a, b) => a.Column11 - b.Column11);
+                return sortedVolcanoes.slice(0, 10);
+            };
+
+
+            const get10MostRecentActiveVolcanoes = () => {
+                const sortedVolcanoes = [...volcanoes].sort((a, b) => {
+                    // Parse the dates considering BCE, CE, and Unknown
+                    const dateA = parseDate(a.Column6);
+                    const dateB = parseDate(b.Column6);
+
+                    // Compare the parsed dates
+                    if (dateA === null && dateB === null) return 0; // Both dates are unknown
+                    if (dateA === null) return 1; // Date A is unknown
+                    if (dateB === null) return -1; // Date B is unknown
+
+                    // Compare dates normally
+                    return dateB - dateA; // Sort in descending order
+                });
+
+                return sortedVolcanoes.slice(0, 10);
+            };
+
+            const getTop10StratoVolcanoes = () => {
+                const sortedVolcanoes = [...volcanoes].filter(volcano => volcano.Column4 === 'Stratovolcano' || volcano.Column4 === 'Stratovolcano(es)').sort((a, b) => b.Column11 - a.Column11);
+                return sortedVolcanoes.slice(0, 10);
+            };
+
+            const get10MostRecentActiveVolcanoesInEurope = () => {
+                const sortedVolcanoes = [...volcanoes].filter(volcano => volcano.Column7 === 'Mediterranean and Western Asia').sort((a, b) => {
+                    const dateA = parseDate(a.Column6);
+                    const dateB = parseDate(b.Column6);
+
+                    if (dateA === null && dateB === null) return 0;
+                    if (dateA === null) return 1;
+                    if (dateB === null) return -1;
+
+                    return dateB - dateA;
+                });
+
+                return sortedVolcanoes.slice(0, 10);
+            };
+
+            const get10MostRecentActiveVolcanoesInUSA = () => {
+                const sortedVolcanoes = [...volcanoes].filter(volcano => volcano.Column3 === 'United States').sort((a, b) => {
+                    const dateA = parseDate(a.Column6);
+                    const dateB = parseDate(b.Column6);
+
+                    if (dateA === null && dateB === null) return 0;
+                    if (dateA === null) return 1;
+                    if (dateB === null) return -1;
+
+                    return dateB - dateA;
+                });
+
+                return sortedVolcanoes.slice(0, 10);
+            };
+
+            const get10MostRecentActiveVolcanoesInSouthAmerica = () => {
+                const sortedVolcanoes = [...volcanoes].filter(volcano => volcano.Column7 === 'South America').sort((a, b) => {
+                    const dateA = parseDate(a.Column6);
+                    const dateB = parseDate(b.Column6);
+
+                    if (dateA === null && dateB === null) return 0;
+                    if (dateA === null) return 1;
+                    if (dateB === null) return -1;
+
+                    return dateB - dateA;
+                });
+
+                return sortedVolcanoes.slice(0, 10);
+            };
+
+            const countryContinentMap = {
+                Germany: 'Europe',
+                France: 'Europe',
+                Spain: 'Europe',
+                Italy: 'Europe',
+                Greece: 'Europe',
+                Turkiye: 'Europe', // Assuming this is Turkey
+                Russia: 'Europe',
+                Georgia: 'Europe',
+                Armenia: 'Europe',
+                'Armenia-Azerbaijan': 'Europe', // Assuming this is Armenia
+                Yemen: 'Asia',
+                Eritrea: 'Africa',
+                Ethiopia: 'Africa',
+                'Ethiopia-Eritrea': 'Africa', // Assuming this is Ethiopia
+                'Ethiopia-Djibouti': 'Africa', // Assuming this is Ethiopia
+                Kenya: 'Africa',
+                Tanzania: 'Africa',
+                Uganda: 'Africa',
+                'DR Congo': 'Africa',
+                'DR Congo-Rwanda': 'Africa', // Assuming this is DR Congo
+                'Uganda-Rwanda': 'Africa', // Assuming this is Rwanda
+                'Equatorial Guinea': 'Africa',
+                Cameroon: 'Africa',
+                Niger: 'Africa',
+                Algeria: 'Africa',
+                Chad: 'Africa',
+                Sudan: 'Africa',
+                'Syria-Jordan-Saudi Arabia': 'Asia', // Assuming this is Saudi Arabia
+                'Saudi Arabia': 'Asia',
+                Comoros: 'Africa',
+                Madagascar: 'Africa',
+                Australia: 'Oceania',
+                'South Africa': 'Africa', // Assuming this is South Africa
+                'New Zealand': 'Oceania',
+                Tonga: 'Oceania',
+                'United States': 'North America',
+                Samoa: 'Oceania',
+                Fiji: 'Oceania',
+                'Papua New Guinea': 'Oceania',
+                'Solomon Islands': 'Oceania',
+                Vanuatu: 'Oceania',
+                'France - claimed by Vanuatu': 'Europe', // Assuming this is France
+                India: 'Asia',
+                Indonesia: 'Asia',
+                Philippines: 'Asia',
+                China: 'Asia',
+                Vietnam: 'Asia',
+                'Burma (Myanmar)': 'Asia', // Assuming this is Myanmar
+                Taiwan: 'Asia',
+                Japan: 'Asia',
+                'Japan - administered by Russia': 'Asia', // Assuming this is Japan
+                Mongolia: 'Asia',
+                'China-North Korea': 'Asia', // Assuming this is China
+                'North Korea-South Korea': 'Asia', // Assuming this is North Korea
+                'South Korea': 'Asia',
+                Canada: 'North America',
+                'Undersea Features': 'Ocean', // Assuming these are not considered part of any continent
+                Ecuador: 'South America',
+                'Mexico': 'North America',
+                'Mexico-Guatemala': 'North America', // Assuming this is Mexico
+                Guatemala: 'North America',
+                'El Salvador-Guatemala': 'North America', // Assuming this is El Salvador
+                'El Salvador': 'North America',
+                Honduras: 'North America',
+                Nicaragua: 'North America',
+                'Costa Rica': 'North America',
+                Panama: 'North America',
+                Colombia: 'South America',
+                'Colombia-Ecuador': 'South America', // Assuming this is Colombia
+                Peru: 'South America',
+                'Chile-Peru': 'South America', // Assuming this is Chile
+                Chile: 'South America',
+                'Chile-Bolivia': 'South America', // Assuming this is Chile
+                Bolivia: 'South America',
+                'Chile-Argentina': 'South America', // Assuming this is Chile
+                Argentina: 'South America',
+                Netherlands: 'Europe',
+                'Saint Kitts and Nevis': 'North America', // Assuming this is Saint Kitts and Nevis
+                Dominica: 'North America',
+                'Saint Lucia': 'North America', // Assuming this is Saint Lucia
+                'Saint Vincent and the Grenadines': 'North America', // Assuming this is Saint Vincent and the Grenadines
+                Grenada: 'North America',
+                Iceland: 'Europe',
+                Norway: 'Europe',
+                Portugal: 'Europe',
+                'Cabo Verde': 'Africa', // Assuming this is Cape Verde
+                'Antarctica': 'Antarctica',
+                'United Kingdom': 'Europe'
+            };
+
+            // Function to get all volcanoes in a given continent
+            const getAllVolcanoesByContinent = (continent) => {
+                const sortedVolcanoes = [...volcanoes].filter(volcano => countryContinentMap[volcano.Column3] === continent);
+                return sortedVolcanoes;
+            };
+
+
+            const parseDate = (dateStr) => {
+                if (!dateStr || dateStr.toLowerCase() === 'unknown') return null;
+
+                const parts = dateStr.trim().split(' ');
+                const year = parseInt(parts[0]);
+                const era = parts[1] && parts[1].toLowerCase();
+
+                if (era === 'bce') return -year;
+                if (era === 'ce') return year;
+
+                return year; // Assume CE if era is not specified
+            };
+
+
+
+
+            useEffect(() => {
+                const fetchData = async () => {
+                    try {
+                        const responseCountries = await fetch('countries.geojson');
+                        if (!responseCountries.ok) {
+                            throw new Error('Failed to fetch data');
+                        }
+                        const dataCountries = await responseCountries.json();
+                        setCountries(dataCountries.features);
+
+                        const responseVolcanoes = await fetch('volcan.json');
+                        if (!responseVolcanoes.ok) {
+                            throw new Error('Failed to fetch data');
+                        }
+                        const dataVolcanoes = await responseVolcanoes.json();
+                        setVolcanoes(dataVolcanoes);
+                    } catch (error) {
+                        console.error('Error fetching data:', error);
+                    }
+                };
+
+                fetchData();
+
+                return () => {
+                    // Cleanup function if necessary
+                };
+            }, []);
+
+            useEffect(() => {
+                // Render the globe initially with all volcanoes
+                if (volcanoes.length > 0) {
+                    renderGlobe(volcanoes);
+                }
+            }, [volcanoes]);
+
+            const toggleAllVolcanoes = () => {
+                clearGlobe();
+                renderGlobe(volcanoes);
+            };
+
+            const toggleTop10HighestVolcanoes = () => {
+                clearGlobe();
+                renderGlobe(getTop10HighestVolcanoes());
+            };
+
+            const toggleTop10LowestVolcanoes = () => {
+                clearGlobe();
+                renderGlobe(getTop10LowestVolcanoes());
+            };
+
+            const toggle10MostRecentActiveVolcanoes = () => {
+                clearGlobe();
+                renderGlobe(get10MostRecentActiveVolcanoes());
+            };
+
+            const toggleTop10StratoVolcanoes = () => {
+                clearGlobe();
+                renderGlobe(getTop10StratoVolcanoes());
+            };
+
+            const toggle10MostRecentActiveVolcanoesInEurope = () => {
+                clearGlobe();
+                renderGlobe(get10MostRecentActiveVolcanoesInEurope());
+            };
+
+            const toggle10MostRecentActiveVolcanoesInUSA = () => {
+                clearGlobe();
+                renderGlobe(get10MostRecentActiveVolcanoesInUSA());
+            };
+
+            const toggle10MostRecentActiveVolcanoesInSouthAmerica = () => {
+                clearGlobe();
+                renderGlobe(get10MostRecentActiveVolcanoesInSouthAmerica());
+            };
+
+            const toggleAllVolcanoesByContinent = (continent) => {
+                clearGlobe();
+                renderGlobe(getAllVolcanoesByContinent(continent));
+            };
+
+            const clearGlobe = () => {
+                ReactDOM.unmountComponentAtNode(document.getElementById('globeViz'));
+            };
+
+            const renderGlobe = (volcanoes) => {
+                ReactDOM.render(
+                    <Globe
+                        globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
+                        backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
+                        polygonsData={countries}
+                        polygonAltitude={0.005}
+                        polygonCapColor={() => "rgba(33,150,243,0.01)"}
+                        polygonSideColor={() => "rgba(0,188,212, 0.015)"}
+                        polygonsTransitionDuration={0}
+                        polygonStrokeColor={() => "rgba(255, 0, 255, 0.6)"}
+                        polygonLabel={({ properties: d }) => `
+                            <b>${d.ADMIN} (${d.ISO_A2})</b> <br />
+                            Population: <i>${d.POP_EST}</i>
+                        `}
+                        pointsData={volcanoes}
+                        pointLat="Column9"
+                        pointLng="Column10"
+                        pointAltitude={d => Math.abs(d.Column11 * 5e-5)}
+                        pointRadius={0.12}
+                        pointColor={d => d3.scaleOrdinal(d3.schemePastel1.map(col => polished.transparentize(0.2, col)))(d.type)}
+                        pointLabel={d => `
+                            <div style="text-align: center">
+                                <div><b>${d.Column2}</b>, ${d.Column3}</div>
+                                <div>(${d.Column4})</div>
+                                <div>Elevation: <em>${d.Column11}</em>m</div>
+                                <div>Last Known Eruption: <em>${d.Column6}</em></div>
+                            </div>
+                        `}
+
+                        labelsData={volcanoes}
+                        labelLat="lat"
+                        labelLng="lon"
+                        labelAltitude={d => (d.Column11 * 5e-5) + 1e-6}
+                        labelDotRadius={0.12}
+                        labelDotOrientation={() => 'bottom'}
+                        labelColor={d => d3.scaleOrdinal(d3.schemePastel1.map(col => polished.transparentize(0.2, col)))(d.type)}
+                        labelText="name"
+                        labelSize={0.15}
+                        labelResolution={1}
+                        labelLabel={d => `
+                            <div style="text-align: center">
+                                <div><b>${d.Column2}</b>, ${d.Column3}</div>
+                                <div>(${d.Column4})</div>
+                                <div>Elevation: <em>${d.Column11}</em>m</div>
+                            </div>
+                        `}
+                    />,
+                    document.getElementById('globeViz')
+                );
+            };
+
+            if (!countries) {
+                return <div>Loading...</div>;
+            }
+
+            return (
+                <div>
+                    <button id="toggleAllVolcanoesBtn" onClick={toggleAllVolcanoes}>
+                        Show All Volcanoes
+                    </button>
+                    <button id="toggleTop10HighestVolcanoesBtn" onClick={toggleTop10HighestVolcanoes}>
+                        Show 10 Highest Volcanoes
+                    </button>
+                    <button id="toggleTop10LowestVolcanoesBtn" onClick={toggleTop10LowestVolcanoes}>
+                        Show 10 Lowest Volcanoes
+                    </button>
+                    <button id="toggle10MostRecentActiveVolcanoesBtn" onClick={toggle10MostRecentActiveVolcanoes}>
+                        Show 10 Most Recent Active Volcanoes
+                    </button>
+                    <button id="toggleTop10StratoVolcanoesBtn" onClick={toggleTop10StratoVolcanoes}>
+                        Show 10 Strato Volcanoes
+                    </button>
+                    <button id="toggle10MostRecentActiveVolcanoesInEuropeBtn" onClick={toggle10MostRecentActiveVolcanoesInEurope}>
+                        Show 10 Most Recent Active Volcanoes in Europe
+                    </button>
+                    <button id="toggle10MostRecentActiveVolcanoesInUSA" onClick={toggle10MostRecentActiveVolcanoesInUSA}>
+                        Show 10 Most Recent Active Volcanoes in USA
+                    </button>
+                    <button id="toggle10MostRecentActiveVolcanoesInSouthAmerica" onClick={toggle10MostRecentActiveVolcanoesInSouthAmerica}>
+                        Show 10 Most Recent Active Volcanoes in South America
+                    </button>
+                    <div class="dropdown">
+                        <button class="button dropbtn">Get Volcanoes by Continent</button>
+                        <div class="dropdown-content">
+                            <a href="#" onClick={() => toggleAllVolcanoesByContinent("Africa")}>Africa</a>
+                            <a href="#" onClick={() => toggleAllVolcanoesByContinent("Asia")}>Asia</a>
+                            <a href="#" onClick={() => toggleAllVolcanoesByContinent("Europe")}>Europe</a>
+                            <a href="#" onClick={() => toggleAllVolcanoesByContinent("North America")}>North America</a>
+                            <a href="#" onClick={() => toggleAllVolcanoesByContinent("Oceania")}>Oceania</a>
+                            <a href="#" onClick={() => toggleAllVolcanoesByContinent("South America")}>South America</a>
+                            <a href="#" onClick={() => toggleAllVolcanoesByContinent("Antarctica")}>Antarctica</a>
+                        </div>
+                    </div>
+
+
+                </div>
+            );
+
+        };
+
+        ReactDOM.render(
+            <World />,
+            document.getElementById('overlay')
+        );
+    </script>
+
+</body>
+
+</html>
